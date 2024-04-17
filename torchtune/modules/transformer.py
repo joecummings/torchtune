@@ -209,14 +209,3 @@ class TransformerDecoder(nn.Module):
         # shape: [b, s, v]
         output = self.output(h).float()
         return output
-
-
-class MoE(nn.Module):
-    def __init__(self, embed_dim: int, num_experts: int, expert: nn.Module, num_experts_per_token: int) -> None:
-        super().__init__()
-        self.gate = nn.Linear(embed_dim, num_experts, bias=False)
-        self.experts = _get_clones(expert, num_experts)
-        self.num_experts_per_token = num_experts_per_token
-
-    def forward(self, x: Tensor) -> Tensor:
-        pass

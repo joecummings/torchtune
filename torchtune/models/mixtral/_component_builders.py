@@ -17,15 +17,15 @@ from torchtune.modules import (
     RotaryPositionalEmbeddings,
     TransformerDecoder,
     TransformerDecoderLayer,
-    MoE,
+    MoELayer,
 )
 
 from torchtune.modules.peft import LORA_ATTN_MODULES, LoRALinear
 
 """
-Component builders for the Mistral 7B models and popular variants such as LoRA.
+Component builders for the Mixtral 8x7B models and popular variants such as LoRA.
 
-TorchTune provides composable building blocks. Builder functions help
+torchtune provides composable building blocks. Builder functions help
 stitch these building blocks into higher-level components. This design has
 two benefits:
 - The building blocks themselves are very flexible. For example, ``CausalSelfAttention``
@@ -35,6 +35,11 @@ the building blocks simple.
 """
 
 def mixtral(
+    *,
+    # moe args
+    num_experts: int,
+    num_experts_per_token: int,
+    # mistral args
     vocab_size: int,
     num_layers: int,
     num_heads: int,
@@ -73,7 +78,7 @@ def mixtral(
         rope_base (int): base for the rotary positional embeddings. Default: 10_000
 
     Returns:
-        TransformerDecoder: Instantiation of mistral model.
+        TransformerDecoder: Instantiation of Mixtral model.
     """
     head_dim = embed_dim // num_heads
     num_kv_heads = num_kv_heads if num_kv_heads else num_heads
@@ -93,10 +98,16 @@ def mixtral(
         max_seq_len=max_seq_len,
         attn_dropout=attn_dropout,
     )
-    mlp = mistral_mlp(dim=embed_dim, hidden_dim=intermediate_dim)
+    expert = mistral_mlp(dim=embed_dim, hidden_dim=intermediate_dim)
+    moe_layer = MoELayer(
+        embed_dim=embed_dim,
+        num_experts=num_experts,
+        expert=expert,
+        num_experts_per_token=num_experts_per_token,
+    )
     layer = TransformerDecoderLayer(
         attn=self_attn,
-        mlp=mlp,
+        mlp=moe_layer,
         sa_norm=RMSNorm(dim=embed_dim, eps=norm_eps),
         mlp_norm=RMSNorm(dim=embed_dim, eps=norm_eps),
     )
@@ -122,17 +133,14 @@ def mistral_mlp(dim: int, hidden_dim: int) -> FeedForward:
     up_proj = nn.Linear(dim, hidden_dim, bias=False)
     return FeedForward(gate_proj=gate_proj, down_proj=down_proj, up_proj=up_proj)
 
-
-
-
-
-
-
-def lora_mistral(
+def lora_mixtral(
     lora_attn_modules: List[LORA_ATTN_MODULES],
     apply_lora_to_mlp: bool = False,
     apply_lora_to_output: bool = False,
     *,
+    # moe args
+    num_experts: int,
+    num_experts_per_token: int,
     # mistral args
     vocab_size: int,
     num_layers: int,
@@ -256,7 +264,7 @@ def lora_mistral(
     return model
 
 
-def lora_mistral_self_attention(
+def lora_mixtral_self_attention(
     lora_modules: List[LORA_ATTN_MODULES],
     *,
     # CausalSelfAttention args
@@ -372,7 +380,7 @@ def lora_mistral_self_attention(
     return self_attn
 
 
-def lora_mistral_mlp(
+def lora_mixtral_mlp(
     *,
     dim: int,
     hidden_dim: int,

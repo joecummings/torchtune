@@ -54,3 +54,39 @@ class TestFeedForward:
             x_out = ffn(input)
         assert_expected(x_out.mean(), torch.tensor(251.5356), atol=1e-7, rtol=1e-3)
         assert_expected(x_out.max(), torch.tensor(503.0614), atol=1e-7, rtol=1e-3)
+
+
+class TestMoELayerForward:
+    """Class for testing MoE layer forward pass."""
+
+    @pytest.fixture
+    def input_params(self) -> Tuple[int, int]:
+        dim = 4096
+        num_experts = 16
+        num_experts_per_token = 2
+        return dim, num_experts, num_experts_per_token
+
+    @pytest.fixture
+    def input(self, input_params: Tuple[int, int]) -> Tensor:
+        dim, _, _ = input_params
+        return torch.randn(1, dim)
+
+    @pytest.fixture
+    def moe_layer(self, input_params: Tuple[int, int]) -> MoELayer:
+        dim, num_experts, num_experts_per_token = input_params
+        expert = nn.Linear(dim, dim, bias=False)
+        moe_layer = MoELayer(
+            embed_dim=dim,
+            num_experts=num_experts,
+            expert=expert,
+            num_experts_per_token=num_experts_per_token,
+        ).eval()
+        fixed_init_model(moe_layer)
+        moe_layer.eval()
+        return moe_layer
+
+    def test_forward(self, input: Tensor, moe_layer: MoELayer) -> None:
+        with torch.no_grad():
+            x_out = moe_layer(input)
+        assert_expected(x_out.mean(), torch.tensor(251.5356), atol=1e-7, rtol=1e-3)
+        assert_expected(x_out.max(), torch.tensor(503.0614), atol=1e-7, rtol=1e-3)
