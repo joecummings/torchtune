@@ -29,7 +29,7 @@ torchtune provides composable building blocks. Builder functions help
 stitch these building blocks into higher-level components. This design has
 two benefits:
 - The building blocks themselves are very flexible. For example, ``CausalSelfAttention``
-can take either nn.Linear or nn.LoRALinear for ``q_proj``.
+can take either ``nn.Linear`` or ``nn.LoRALinear`` for ``q_proj``.
 - Builder functions expose a set of configurable params which keep the constructors of
 the building blocks simple.
 """
@@ -52,16 +52,19 @@ def mixtral(
     rope_base: int = 10_000,
 ) -> TransformerDecoder:
     """
-    Build the decoder assoicated with the mistral model. This includes:
+    Build the decoder assoicated with the mixtral model. This includes:
     - Token embeddings
     - num_layers number of TransformerDecoderLayer blocks
     - RMS Norm layer applied to the output of the transformer
     - Final projection into token space
+    - A number of experts
 
     This does NOT currently include inference-time optimizations such as
     sliding-window attention
 
     Args:
+        num_experts (int): number of experts to use
+        num_experts_per_token (int): number of experts to select per token
         vocab_size (int): number of tokens in vocabulary.
         num_layers (int): number of layers in the transformer decoder.
         num_heads (int): number of query heads. For MHA this is also the
@@ -159,7 +162,7 @@ def lora_mixtral(
     quantize_base: bool = False,
 ) -> TransformerDecoder:
     """
-    Return a version of Mistral (an instance of :func:`~torchtune.modules.TransformerDecoder`)
+    Return a version of Mixtral (an instance of :func:`~torchtune.modules.TransformerDecoder`)
     with LoRA applied to some of the linear layers in its self-attention modules.
 
     Args:
@@ -192,10 +195,13 @@ def lora_mixtral(
             supported for quantization currently.
 
     Returns:
-        TransformerDecoder: Instantiation of Mistral model with LoRA applied to
+        TransformerDecoder: Instantiation of Mixtral model with LoRA applied to
         a subset of the attention projections in each layer.
 
     """
+
+    if quantize_base:
+        raise RuntimeError("`quantize_base` is currently not supported.")
 
     self_attn = lora_mistral_self_attention(
         lora_modules=lora_attn_modules,
@@ -212,7 +218,7 @@ def lora_mixtral(
     )
 
     if apply_lora_to_mlp:
-        mlp = lora_mistral_mlp(
+        mistral_mlp = lora_mistral_mlp(
             dim=embed_dim,
             hidden_dim=intermediate_dim,
             lora_rank=lora_rank,
@@ -220,11 +226,18 @@ def lora_mixtral(
             quantize_base=quantize_base,
         )
     else:
-        mlp = mistral_mlp(dim=embed_dim, hidden_dim=intermediate_dim)
+        mistral_mlp = mistral_mlp(dim=embed_dim, hidden_dim=intermediate_dim)
+
+    moe_layer = MoELayer(
+        embed_dim=embed_dim,
+        num_experts=num_experts,
+        expert=mistral_mlp,
+        num_experts_per_token=num_experts_per_token,
+    )
 
     layer = TransformerDecoderLayer(
         attn=self_attn,
-        mlp=mlp,
+        mlp=moe_layer,
         sa_norm=RMSNorm(dim=embed_dim, eps=norm_eps),
         mlp_norm=RMSNorm(dim=embed_dim, eps=norm_eps),
     )
@@ -247,19 +260,6 @@ def lora_mixtral(
         norm=RMSNorm(embed_dim, eps=norm_eps),
         output=output_proj,
     )
-
-    if quantize_base:
-        # For QLoRA, we reparametrize 4-bit tensors to higher precision, and offload to CPU on the fly
-        # so as to not increase peak memory
-        model._register_state_dict_hook(
-            partial(
-                reparametrize_as_dtype_state_dict_post_hook,
-                # TODO this is clowny, figure out a better way to get what precision the rest
-                # of the model is in
-                dtype=tok_embeddings.weight.dtype,
-                offload_to_cpu=True,
-            )
-        )
 
     return model
 

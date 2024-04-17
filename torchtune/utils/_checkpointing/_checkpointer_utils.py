@@ -21,6 +21,7 @@ from torchtune.utils._distributed import contains_fsdp
 class ModelType(Enum):
     LLAMA2 = "llama2"
     MISTRAL = "mistral"
+    MIXTRAL = "mixtral"
     GEMMA = "gemma"
 
 

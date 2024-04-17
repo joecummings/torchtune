@@ -21,13 +21,15 @@ the ``mixtral_8x7b`` model builder uses the ``mixtral`` component builder.
 def mixtral_8x7b() -> TransformerDecoder:
     """
     Builder for creating a Mixtral 8x7B model initialized w/ the default 7b parameter values
-    from https://mistral.ai/news/announcing-mistral-7b/
+    from https://mistral.ai/news/mixtral-of-experts/
 
 
     Returns:
         TransformerDecoder: Instantiation of Mixtral 8x7B model
     """
     return mixtral(
+        num_experts=8,
+        num_experts_per_token=2,
         vocab_size=32_000,
         num_layers=32,
         num_heads=32,
@@ -56,7 +58,7 @@ def lora_mixtral_8x7b(
     quantize_base: bool = False,
 ) -> TransformerDecoder:
     """
-    Builder for creating a Mistral 7B model with LoRA enabled.
+    Builder for creating a Mixtral 8x7B model with LoRA enabled.
 
     Args:
         lora_attn_modules (List[LORA_ATTN_MODULES]): list of which linear layers
@@ -70,6 +72,9 @@ def lora_mixtral_8x7b(
         lora_alpha (float): scaling factor for the low-rank approximation
         quantize_base (bool): Whether to quantize base model weights
 
+    Raises:
+        RuntimeError: If ``quantize_base`` is True. LoRA quantization is not currently supported.
+
     Returns:
         TransformerDecoder: Instantiation of Mixtral 8x7B model with LoRA applied
     """
@@ -77,6 +82,8 @@ def lora_mixtral_8x7b(
         lora_attn_modules=lora_attn_modules,
         apply_lora_to_mlp=apply_lora_to_mlp,
         apply_lora_to_output=apply_lora_to_output,
+        num_experts=8,
+        num_experts_per_token=2,
         vocab_size=32_000,
         num_layers=32,
         num_heads=32,
