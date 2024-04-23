@@ -155,7 +155,97 @@ def hf_to_tune(
             elif "k_proj" in key:
                 value = _permute(value, num_kv_heads)
             converted_state_dict[new_key] = value
+
     return converted_state_dict
+
+
+def qkv_split(param):
+    q_per_kv = 1
+    qs = []
+    ks = []
+    vs = []
+    head_dim = 3072 // 32
+    for chunk in torch.chunk(param, 32) :
+        split = torch.split(
+            chunk, [head_dim * q_per_kv, head_dim, head_dim]
+        )
+        qs.append(split[0])
+        ks.append(split[1])
+        vs.append(split[2])
+    q = torch.cat(qs)
+    k = torch.cat(ks)
+    v = torch.cat(vs)
+    return q, k, v
+
+
+def hf_to_tune_phi3(
+    state_dict: Dict[str, torch.Tensor],
+    num_heads: int = 32,
+    num_kv_heads: int = 32,
+    dim: int = 3072,
+    head_dim: int = None,
+) -> Dict[str, torch.Tensor]:
+    """
+    Convert a state dict from HF's format to TorchTune's format. State dicts
+    from multiple checkpoint files should be consolidated
+    """
+    converted_state_dict = {}
+
+    if head_dim is None:
+        head_dim = dim // num_heads
+
+    def _permute(t, n_heads):
+        return (
+            t.view(n_heads, 2, head_dim // 2, dim)
+            .transpose(1, 2)
+            .reshape((head_dim * n_heads), dim)
+        )
+
+    for key, value in state_dict.items():
+        if "gate_up_proj" in key:
+            # Handle the case where the key is a concatenation of gate_proj and up_proj (Phi-3)
+            gate_proj, up_proj = value.chunk(2, dim=0)
+            # import pdb
+            # pdb.set_trace()
+            gate_proj_key = key.replace("gate_up_proj", "gate_proj")
+            up_proj_key = key.replace("gate_up_proj", "up_proj")
+            new_gate_proj_key = _get_mapped_key(gate_proj_key, _FROM_HF)
+            new_up_proj_key = _get_mapped_key(up_proj_key, _FROM_HF)
+            converted_state_dict[new_gate_proj_key] = gate_proj
+            converted_state_dict[new_up_proj_key] = up_proj
+        elif "qkv_proj" in key:
+            # Handle the case where qkv is fused
+            q, k, v = value.chunk(3, dim=0)
+            # import pdb
+            # pdb.set_trace()
+            q_key = key.replace("qkv_proj", "q_proj")
+            k_key = key.replace("qkv_proj", "k_proj")
+            v_key = key.replace("qkv_proj", "v_proj")
+            new_q_key = _get_mapped_key(q_key, _FROM_HF)
+            new_k_key = _get_mapped_key(k_key, _FROM_HF)
+            new_v_key = _get_mapped_key(v_key, _FROM_HF)
+            converted_state_dict[new_q_key] = _permute(q, num_heads)
+            converted_state_dict[new_k_key] = _permute(k, num_kv_heads)
+            converted_state_dict[new_v_key] = _permute(v, num_kv_heads)
+        else:
+            new_key = _get_mapped_key(key, _FROM_HF)
+            converted_state_dict[new_key] = value
+
+    return converted_state_dict
+
+
+def tune_to_hf_phi3(
+    state_dict: Dict[str, torch.Tensor],
+    num_heads: int = 32,
+    num_kv_heads: int = 32,
+    dim: int = 4096,
+    head_dim: int = None,
+) -> Dict[str, torch.Tensor]:
+    """
+    Convert a state dict from TorchTune's format to HF's format. This function
+    doesn't handle any sharding or splitting of state
+    """
+    pass
 
 
 def tune_to_hf(

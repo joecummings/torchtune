@@ -48,6 +48,7 @@ torchtune currently supports the following models.
 | [Llama2](https://llama.meta.com/llama2/)   | 7B, 13B, 70B [[models](torchtune/models/llama2/_model_builders.py), [configs](recipes/configs/llama2/)]        |
 | [Mistral](https://huggingface.co/mistralai)   | 7B [[model](torchtune/models/mistral/_model_builders.py), [configs](recipes/configs/mistral/)] |
 | [Gemma](https://huggingface.co/collections/google/gemma-release-65d5efbccdbb8c4202ec078b)   | 2B [[model](torchtune/models/gemma/_model_builders.py), [configs](recipes/configs/gemma/)] |
+| [Phi-3](https://news.microsoft.com/source/features/ai/the-phi-3-small-language-models-with-big-potential/)  | Mini4k, Mini128k [[models](torchtune/models/phi3/_model_builders.py), [configs](recipes/configs/phi3)]  |
 
 We'll be adding a number of new models in the coming weeks, including support for 70B versions and MoEs.
 

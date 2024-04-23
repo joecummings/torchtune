@@ -381,11 +381,20 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
             del state_dict
             gc.collect()
 
-        converted_state_dict[utils.MODEL_KEY] = convert_weights.hf_to_tune(
-            merged_state_dict,
-            num_heads=self._config["num_attention_heads"],
-            num_kv_heads=self._config["num_key_value_heads"],
-            dim=self._config["hidden_size"],
+        converted_state_dict[utils.MODEL_KEY] = (
+            convert_weights.hf_to_tune_phi3(
+                merged_state_dict,
+                num_heads=self._config["num_attention_heads"],
+                num_kv_heads=self._config["num_key_value_heads"],
+                dim=self._config["hidden_size"],
+            )
+            if self._model_type == "phi3"
+            else convert_weights.hf_to_tune(
+                merged_state_dict,
+                num_heads=self._config["num_attention_heads"],
+                num_kv_heads=self._config["num_key_value_heads"],
+                dim=self._config["hidden_size"],
+            )
         )
 
         if self._adapter_checkpoint:
@@ -420,11 +429,20 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
         self._output_dir.mkdir(exist_ok=True)
 
         # convert the state_dict back to hf format; do this inplace
-        state_dict[utils.MODEL_KEY] = convert_weights.tune_to_hf(
-            state_dict[utils.MODEL_KEY],
-            num_heads=self._config["num_attention_heads"],
-            num_kv_heads=self._config["num_key_value_heads"],
-            dim=self._config["hidden_size"],
+        state_dict[utils.MODEL_KEY] = (
+            convert_weights.tune_to_hf_phi3(
+                state_dict[utils.MODEL_KEY],
+                num_heads=self._config["num_attention_heads"],
+                num_kv_heads=self._config["num_key_value_heads"],
+                dim=self._config["hidden_size"],
+            )
+            if self._model_type == "phi3"
+            else convert_weights.tune_to_hf(
+                state_dict[utils.MODEL_KEY],
+                num_heads=self._config["num_attention_heads"],
+                num_kv_heads=self._config["num_key_value_heads"],
+                dim=self._config["hidden_size"],
+            )
         )
 
         # split the state_dict into separate dicts, one for each output checkpoint file
