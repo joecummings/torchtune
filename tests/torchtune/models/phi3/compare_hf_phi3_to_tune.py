@@ -19,22 +19,27 @@ from torchtune.utils import FullModelHFCheckpointer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Check the 4K model
-hf_model_4k = AutoModelForCausalLM.from_pretrained(
-    "microsoft/Phi-3-mini-4k-instruct", trust_remote_code=True
-).eval()
-tune_model_4k = phi3_mini_4k().eval()
-checkpointer = FullModelHFCheckpointer(
-    checkpoint_dir="./model",
-    checkpoint_files=[
-        "model-00001-of-00002.safetensors",
-        "model-00002-of-00002.safetensors",
-    ],
-    model_type="phi3",
-    output_dir="./",
-)
-state_dict = checkpointer.load_checkpoint()
 with torch.device("cuda"):
+    hf_model_4k = AutoModelForCausalLM.from_pretrained(
+        "microsoft/Phi-3-mini-4k-instruct", trust_remote_code=True
+    ).eval()
+
+with torch.device("cuda"):
+    tune_model_4k = phi3_mini_4k().eval()
+    checkpointer = FullModelHFCheckpointer(
+        checkpoint_dir="./model",
+        checkpoint_files=[
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors",
+        ],
+        model_type="phi3",
+        output_dir="./",
+    )
+    state_dict = checkpointer.load_checkpoint()
     tune_model_4k.load_state_dict(state_dict["model"])
+
+import pdb
+pdb.set_trace()
 
 for i in range(5):
     with torch.no_grad():
