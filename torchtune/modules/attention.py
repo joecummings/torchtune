@@ -160,6 +160,9 @@ class CausalSelfAttention(nn.Module):
                 f"than max_seq_len ({self.max_seq_len})"
             )
 
+        import pdb
+        pdb.set_trace()
+
         # q has shape [b, s, num_heads * head_dim]
         # k has shape [b, s, num_kv_heads * head_dim]
         # v has shape [b, s, num_kv_heads * head_dim]

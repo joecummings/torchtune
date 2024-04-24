@@ -65,6 +65,8 @@ class TransformerDecoderLayer(nn.Module):
         # Input tensor and attention output have the same shape
         # [b, s, d]
         # Norm applied before self-attention
+        # import pdb
+        # pdb.set_trace()
         attn_out = self.attn(self.sa_norm(x), mask, input_pos)
 
         # Residual connection; shape: [b, s, d]
@@ -188,6 +190,9 @@ class TransformerDecoder(nn.Module):
 
         # shape: [b, s, d]
         h = self.tok_embeddings(tokens)
+
+        # import pdb
+        # pdb.set_trace()
 
         mask = None
         if self.causal_mask is not None:
