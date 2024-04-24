@@ -205,8 +205,6 @@ def hf_to_tune_phi3(
         if "gate_up_proj" in key:
             # Handle the case where the key is a concatenation of gate_proj and up_proj (Phi-3)
             gate_proj, up_proj = value.chunk(2, dim=0)
-            # import pdb
-            # pdb.set_trace()
             gate_proj_key = key.replace("gate_up_proj", "gate_proj")
             up_proj_key = key.replace("gate_up_proj", "up_proj")
             new_gate_proj_key = _get_mapped_key(gate_proj_key, _FROM_HF)
@@ -224,9 +222,9 @@ def hf_to_tune_phi3(
             new_q_key = _get_mapped_key(q_key, _FROM_HF)
             new_k_key = _get_mapped_key(k_key, _FROM_HF)
             new_v_key = _get_mapped_key(v_key, _FROM_HF)
-            converted_state_dict[new_q_key] = _permute(q, num_heads)
-            converted_state_dict[new_k_key] = _permute(k, num_kv_heads)
-            converted_state_dict[new_v_key] = _permute(v, num_kv_heads)
+            converted_state_dict[new_q_key] = q
+            converted_state_dict[new_k_key] = k
+            converted_state_dict[new_v_key] = v
         else:
             new_key = _get_mapped_key(key, _FROM_HF)
             converted_state_dict[new_key] = value

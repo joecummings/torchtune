@@ -17,12 +17,17 @@ import torch
 from torchtune.models.phi3 import phi3_mini_128k, phi3_mini_4k
 from torchtune.utils import FullModelHFCheckpointer
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+# from transformers import Phi3Model, Phi3Config
 
 # Check the 4K model
 with torch.device("cuda"):
     hf_model_4k = AutoModelForCausalLM.from_pretrained(
         "microsoft/Phi-3-mini-4k-instruct", trust_remote_code=True
-    ).eval()
+    )
+    hf_model_4k.config._attn_implementation = "sdpa"
+    hf_model_4k.eval()
+    # Add pdb breakpoint at hf_model_4k.model.layers[0]
 
 with torch.device("cuda"):
     tune_model_4k = phi3_mini_4k().eval()
@@ -43,7 +48,7 @@ pdb.set_trace()
 
 for i in range(5):
     with torch.no_grad():
-        inputs = torch.randint(0, 32_000, (4, 2000))
+        inputs = torch.randint(0, 32_000, (4, 2000), device="cuda")
         hf_output = hf_model_4k(inputs).get("logits")
         tune_output = tune_model_4k(inputs)
         try:
@@ -54,15 +59,15 @@ for i in range(5):
 
 
 # Check the 128K model
-hf_model_4k = AutoModelForCasualLM.from_pretrained("microsoft/Phi-3-mini-128k-instruct")
-tune_model_4k = phi3_mini_128k()
-checkpointer = ...
-state_dict = checkpointer.load_checkpoint()
-with torch.device("cuda"):
-    tune_model_128k.load_state_dict(state_dict["model"])
+# hf_model_4k = AutoModelForCasualLM.from_pretrained("microsoft/Phi-3-mini-128k-instruct")
+# tune_model_4k = phi3_mini_128k()
+# checkpointer = ...
+# state_dict = checkpointer.load_checkpoint()
+# with torch.device("cuda"):
+#     tune_model_128k.load_state_dict(state_dict["model"])
 
-for _ in range(5):
-    inputs = torch.randint(0, 32_000, (4, 8000))
-    hf_output = hf_model_128k(inputs)
-    tune_output = tune_model_128k(inputs)
-    assert hf_output == tune_output
+# for _ in range(5):
+#     inputs = torch.randint(0, 32_000, (4, 8000))
+#     hf_output = hf_model_128k(inputs)
+#     tune_output = tune_model_128k(inputs)
+#     assert hf_output == tune_output
