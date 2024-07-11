@@ -60,10 +60,10 @@ loss:
   _component_: torch.nn.CrossEntropyLoss
 
 # Fine-tuning arguments
-batch_size: 8
-epochs: 1
+batch_size: 4
+epochs: 3
 max_steps_per_epoch: null
-gradient_accumulation_steps: 2
+gradient_accumulation_steps: 4
 compile: False
 
 # Training env
