@@ -262,6 +262,7 @@ class FullModelTorchTuneCheckpointer(_CheckpointerInterface):
         epoch: int,
         intermediate_checkpoint: bool = False,
         adapter_only: bool = False,
+        **kwargs,
     ) -> None:
         """
         Save torchtune checkpoint to file. If ``intermediate_checkpoint`` is True, an additional
@@ -1084,6 +1085,7 @@ class FullModelMetaCheckpointer(_CheckpointerInterface):
         epoch: int,
         intermediate_checkpoint: bool = False,
         adapter_only: bool = False,
+        **kwargs,
     ) -> None:
         """
         Save Meta checkpoint to file. If ``intermediate_checkpoint`` is True, an additional
@@ -1289,6 +1291,7 @@ class DistributedCheckpointer(_CheckpointerInterface):
         state_dict: Dict[str, Any],
         epoch: int,
         save_async: bool = False,
+        **kwargs,
     ) -> None:
         """
         Save a distributed checkpoint to storage.
