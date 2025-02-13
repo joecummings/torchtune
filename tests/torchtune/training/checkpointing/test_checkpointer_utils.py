@@ -292,6 +292,22 @@ class TestGetAllCheckpointsInDir:
         assert ckpt_dir_0 in all_ckpts
         assert ckpt_dir_1 in all_ckpts
 
+    def test_get_all_ckpts_are_sorted(self, tmpdir):
+        """Test that the list of returned checkpoints is sorted."""
+        checkpoints_amount = 100
+        tmpdir = Path(tmpdir)
+
+        ckpt_dirs = []
+        for ix in range(checkpoints_amount):
+            ckpt_dirs.append(tmpdir / f"epoch_{ix}")
+            ckpt_dirs[ix].mkdir(parents=True, exist_ok=True)
+
+        all_ckpts = get_all_checkpoints_in_dir(tmpdir)
+
+        assert len(all_ckpts) == checkpoints_amount
+        for ix in range(checkpoints_amount):
+            assert all_ckpts[ix] == ckpt_dirs[ix]
+
     def test_get_all_ckpts_with_pattern_that_matches_some(self, tmpdir):
         """Test that we only return the checkpoints that match the pattern."""
         tmpdir = Path(tmpdir)
