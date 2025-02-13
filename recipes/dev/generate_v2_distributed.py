@@ -87,7 +87,9 @@ class InferenceRecipe:
         dist.init_process_group(backend="nccl")
         _, rank = utils.get_world_size_and_rank()
         self._is_rank_zero = rank == 0
-        training.set_seed(seed=cfg.seed)
+        training.set_seed(
+            seed=cfg.seed, debug_mode=cfg.get("cudnn_deterministic_mode", None)
+        )
 
     def setup(self, cfg: DictConfig) -> None:
         """Setup the model and transforms."""
@@ -109,7 +111,7 @@ class InferenceRecipe:
         parallelize_module(
             model,
             tp_device_mesh,
-            parallelize_plan=config.instantiate(cfg.parallelize_plan),
+            parallelize_plan=config.instantiate(cfg.tensor_parallel_plan),
         )
 
         with training.set_default_dtype(self._dtype), self._device:

@@ -145,11 +145,13 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
         # Initialize distributed variables
         self.world_size, self.rank = utils.get_world_size_and_rank()
         self._is_rank_zero = self.rank == 0
-        self.parallelize_plan = config.instantiate(cfg.get("parallelize_plan", None))
+        self.tensor_parallel_plan = config.instantiate(
+            cfg.get("tensor_parallel_plan", None)
+        )
         self.tensor_parallel_dim = cfg.get("tensor_parallel_dim", 1)
-        if self.tensor_parallel_dim > 1 and self.parallelize_plan is None:
+        if self.tensor_parallel_dim > 1 and self.tensor_parallel_plan is None:
             raise ValueError(
-                "Parallelism plan need to be provided when tensor parallel is enabled."
+                "Tensor Parallel plan needs to be provided when tensor parallel is enabled."
             )
         if self.world_size % self.tensor_parallel_dim != 0:
             raise ValueError(
@@ -215,7 +217,9 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
 
         # These are public properties which are updated by the checkpoint loader
         # when ``resume_from_checkpoint`` is `True` or validated in tests
-        self.seed = training.set_seed(seed=cfg.seed)
+        self.seed = training.set_seed(
+            seed=cfg.seed, debug_mode=cfg.get("cudnn_deterministic_mode", None)
+        )
         self.epochs_run = 0
         self.total_epochs = cfg.epochs
         self.max_steps_per_epoch = cfg.max_steps_per_epoch
@@ -547,7 +551,7 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
             parallelize_module(
                 model,
                 device_mesh["tp"],
-                parallelize_plan=self.parallelize_plan,
+                parallelize_plan=self.tensor_parallel_plan,
             )
 
         # We currently have two versions of activation checkpointing in this recipe
@@ -652,7 +656,7 @@ class FullFinetuneRecipeDistributed(FTRecipeInterface):
                     try:
                         training.load_from_full_optimizer_state_dict(
                             self._model,
-                            self._optim_ckpt_wrapper.state_dict()[param],
+                            self._optim_ckpt_wrapper.optim_map[param],
                             opt_state_dict[param],
                             self._device,
                         )
