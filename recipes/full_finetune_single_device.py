@@ -27,7 +27,7 @@ from torchtune.training.lr_schedulers import get_lr
 
 from tqdm import tqdm
 
-
+print("blep")
 log = utils.get_logger("DEBUG")
 
 
