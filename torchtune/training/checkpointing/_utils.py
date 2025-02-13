@@ -401,37 +401,27 @@ def copy_files(
 
 def get_recipe_checkpoint_path(
     output_dir: Path,
-    recipe_checkpoint: Optional[str] = None,
-    should_load_recipe_state: bool = False,
-) -> Optional[Path]:
+    recipe_checkpoint_fname: str = "recipe_state.pt",
+) -> Path:
     """
-    If recipe_checkpoint is None, look for recipe_state.pt in {output_dir}/{RECIPE_STATE_DIRNAME}/recipe_state.pt.
-    This is to make it easier to resume from a previous run, without having to specify the recipe_checkpoint.
+    Get the path to the recipe checkpoint file if it exists.
 
     Args:
         output_dir (Path): Directory containing the recipe checkpoint.
         recipe_checkpoint (Optional[str]): Name of the recipe checkpoint file. Defaults to None.
-        should_load_recipe_state (bool): Whether to load the recipe state from the checkpoint.
+
     Returns:
         Optional[Path]: Path to the recipe checkpoint file if should_load_recipe_state is True, otherwise None.
+
     Raises:
         ValueError: If should_load_recipe_state is True and the recipe checkpoint file is missing.
     """
-    if not should_load_recipe_state:
-        return None
+    recipe_checkpoint_path = os.path.join(output_dir, recipe_checkpoint)
 
-    recipe_checkpoint_path = None
-    if recipe_checkpoint:
-        recipe_checkpoint_path = os.path.join(output_dir, recipe_checkpoint)
-    else:
-        recipe_checkpoint_path = os.path.join(
-            output_dir, RECIPE_STATE_DIRNAME, "recipe_state.pt"
-        )
-
-    # TODO: improve this msg
-    if not recipe_checkpoint_path or not os.path.exists(recipe_checkpoint_path):
+    if not os.path.exists(recipe_checkpoint_path):
         raise ValueError(
-            "If should_load_recipe_state is True, recipe_checkpoint file must be provided."
+            f"Recipe checkpoint file not found at {recipe_checkpoint_path}. A valid recipe checkpoint file is required for "
+            "loading recipe state and resuming training."
         )
 
     return Path(recipe_checkpoint_path)

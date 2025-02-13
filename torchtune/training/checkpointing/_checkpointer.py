@@ -389,9 +389,8 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
         adapter_checkpoint (Optional[str]): Path to the adapter weights. If None,
             and `should_load_recipe_state=True`, then look for adapter_model.pt in output_dir/epoch_{largest_epoch}.
             Default is None.
-        recipe_checkpoint (Optional[str]): Path to the recipe state checkpoint file. If None,
-            and `should_load_recipe_state=True`, then look for recipe_state.pt in output_dir/RECIPE_STATE_DIRNAME.
-            Default is None.
+        recipe_checkpoint (str): Relative path to the recipe state checkpoint file from output_dir. If should_load_recipe_state is True,,
+            the checkpointer will attempt to load from output_dir/{recipe_checkpoint}. Default is "recipe_state.pt".
         resume_from_checkpoint (bool): If True, the checkpointer will load the additional checkpoint files corresponding to
             the receipe state from a previous run. Default is False. This flag is deprecated. Please use
             the should_load_recipe_state flag instead.
@@ -413,15 +412,6 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
         safe_serialization: bool = True,
         should_load_recipe_state: bool = False,
     ) -> None:
-
-        self._should_load_recipe_state = should_load_recipe_state
-        if resume_from_checkpoint:
-            self._should_load_recipe_state = resume_from_checkpoint
-            logger.warning(
-                "*resume_from_checkpoint is deprecated. Please use the 'should_load_recipe_state' instead"
-            )
-
-        self._safe_serialization = safe_serialization
         self._checkpoint_dir = Path(checkpoint_dir)
         self._model_type = ModelType[model_type]
         self._output_dir = Path(output_dir)
@@ -429,45 +419,46 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
             ckpt_dir=self._checkpoint_dir, out_dir=self._output_dir
         )
         self._output_dir.mkdir(parents=True, exist_ok=True)
+        self._adapter_checkpoint = adapter_checkpoint
+        self._recipe_checkpoint = recipe_checkpoint
+        self._safe_serialization = safe_serialization
+        if resume_from_checkpoint:
+            self._should_load_recipe_state = resume_from_checkpoint
+            logger.warning(
+                "*resume_from_checkpoint is deprecated. Please use the 'should_load_recipe_state' instead"
+            )
+        self._should_load_recipe_state = should_load_recipe_state
 
         # weight_map contains the state_dict key -> checkpoint file mapping so we can correctly
         # parition the state dict into output checkpoint files. This is updated during checkpoint
         # load
         self._weight_map: Dict[str, str] = None
-
         # the config.json file contains model params needed for state dict conversion
         self._config = json.loads(
             Path.joinpath(self._checkpoint_dir, "config.json").read_text()
         )
+        self.repo_id = self._get_huggingface_repo_id(self.checkpoint_dir)
 
-        # repo_id is necessary for when saving an adapter config, so its compatible with HF.
-        # This json file is produced and saved in the download step.
-        # contents are {"repo_id": "some_model/some_model_version"}
-        repo_id_path = Path.joinpath(self._checkpoint_dir, REPO_ID_FNAME).with_suffix(
-            ".json"
-        )
-        self.repo_id = None
-        if repo_id_path.exists():
-            with open(repo_id_path, "r") as json_file:
-                data = json.load(json_file)
-                self.repo_id = data.get("repo_id")
+        if self._should_load_recipe_state:
+            self._recipe_checkpoint = get_recipe_checkpoint_path(
+                output_dir=self._output_dir,
+                recipe_checkpoint=recipe_checkpoint,
+            )
 
-        #  resume from adapter_model ckpt
-        self._adapter_checkpoint = get_adapter_checkpoint_path(
-            output_dir=self._output_dir,
-            adapter_checkpoint=adapter_checkpoint,
-            should_load_recipe_state=self._should_load_recipe_state,
-            pattern=r"^epoch_(\d+)",
-        )
+            self._adapter_checkpoint = get_adapter_checkpoint_path(
+                output_dir=self._output_dir,
+                adapter_checkpoint=adapter_checkpoint,
+                should_load_recipe_state=self._should_load_recipe_state,
+                pattern=r"^epoch_(\d+)",
+            )
 
-        # resume recipe_state ckpt
-        self._recipe_checkpoint = get_recipe_checkpoint_path(
-            output_dir=self._output_dir,
-            recipe_checkpoint=recipe_checkpoint,
-            should_load_recipe_state=self._should_load_recipe_state,
-        )
+            # logger.info(
+            #     "Loading the recipe state using: "
+            #     f"\n\tcheckpoint_paths: {[str(path) for path in self._checkpoint_paths]}"
+            #     f"\n\trecipe_checkpoint: {self._recipe_checkpoint}"
+            #     f"\n\tadapter_checkpoint: {self._adapter_checkpoint}"
+            # )
 
-        # get ckpt paths
         self._checkpoint_paths = get_model_checkpoint_path(
             checkpoint_files=checkpoint_files,
             checkpoint_dir=self._checkpoint_dir,
@@ -476,13 +467,21 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
             has_adapter_checkpoint=self._adapter_checkpoint is not None,
         )
 
-        if self._should_load_recipe_state:
-            logger.info(
-                "Loading the recipe state using: "
-                f"\n\tcheckpoint_paths: {[str(path) for path in self._checkpoint_paths]}"
-                f"\n\trecipe_checkpoint: {self._recipe_checkpoint}"
-                f"\n\tadapter_checkpoint: {self._adapter_checkpoint}"
-            )
+    def _get_huggingface_repo_id(self, checkpoint_dir: Path) -> Optional[str]:
+        # repo_id is necessary for when saving an adapter config, so its compatible with HF.
+        # This json file is produced and saved in the download step.
+        # contents are {"repo_id": "some_model/some_model_version"}
+        repo_id_path = Path.joinpath(self._checkpoint_dir, REPO_ID_FNAME).with_suffix(
+            ".json"
+        )
+        if repo_id_path.exists():
+            with open(repo_id_path, "r") as json_file:
+                data = json.load(json_file)
+                return data.get("repo_id")
+        logger.warning(
+            f"Could not find {REPO_ID_FNAME}.json in {self._checkpoint_dir}. Will not be able to "
+            "upload adapter config to huggingface."
+        )
 
     def load_checkpoint(self) -> Dict[str, Any]:
         """
@@ -530,6 +529,7 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
             # delete the state_dict to free up memory; TODO check if this del is needed
             del state_dict
             gc.collect()
+
         if self._model_type == ModelType.PHI3_MINI:
             log_rank_zero(
                 logger=logger,
@@ -541,6 +541,7 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
             converted_state_dict[training.MODEL_KEY] = phi3_hf_to_tune(
                 merged_state_dict
             )
+
         elif self._model_type == ModelType.REWARD:
             from torchtune.rlhf.utils import reward_hf_to_tune
 
@@ -550,6 +551,7 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
                 num_kv_heads=self._config["num_key_value_heads"],
                 dim=self._config["hidden_size"],
             )
+
         elif self._model_type == ModelType.QWEN2:
             from torchtune.models.qwen2._convert_weights import qwen2_hf_to_tune
 
@@ -560,6 +562,7 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
                 dim=self._config["hidden_size"],
                 tie_word_embeddings=self._config["tie_word_embeddings"],
             )
+
         elif self._model_type == ModelType.LLAMA3_VISION:
             from torchtune.models.llama3_2_vision._convert_weights import (
                 llama3_vision_hf_to_tune,
@@ -582,12 +585,14 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
                     "supported_aspect_ratios", None
                 ),
             )
+
         elif self._model_type == ModelType.CLIP_TEXT:
             from torchtune.models.clip._convert_weights import clip_text_hf_to_tune
 
             converted_state_dict[training.MODEL_KEY] = clip_text_hf_to_tune(
                 merged_state_dict,
             )
+
         elif self._model_type == ModelType.GEMMA2:
             from torchtune.models.gemma2._convert_weights import gemma2_hf_to_tune
 
@@ -598,12 +603,14 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
                 dim=self._config["hidden_size"],
                 head_dim=self._config.get("head_dim", None),
             )
+
         elif self._model_type == ModelType.T5_ENCODER:
             from torchtune.models.t5._convert_weights import t5_encoder_hf_to_tune
 
             converted_state_dict[training.MODEL_KEY] = t5_encoder_hf_to_tune(
                 merged_state_dict,
             )
+
         else:
             converted_state_dict[training.MODEL_KEY] = convert_weights.hf_to_tune(
                 merged_state_dict,
@@ -815,14 +822,14 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
                     "Saving Llama3.2 Vision adapter weights to PEFT format is not supported, saving to torchtune format instead"
                 )
             else:
-                state_dict[
-                    training.ADAPTER_KEY
-                ] = convert_weights.tune_to_peft_adapter_weights(
-                    state_dict[training.ADAPTER_KEY],
-                    num_heads=self._config["num_attention_heads"],
-                    num_kv_heads=self._config["num_key_value_heads"],
-                    dim=self._config["hidden_size"],
-                    head_dim=self._config.get("head_dim", None),
+                state_dict[training.ADAPTER_KEY] = (
+                    convert_weights.tune_to_peft_adapter_weights(
+                        state_dict[training.ADAPTER_KEY],
+                        num_heads=self._config["num_attention_heads"],
+                        num_kv_heads=self._config["num_key_value_heads"],
+                        dim=self._config["hidden_size"],
+                        head_dim=self._config.get("head_dim", None),
+                    )
                 )
                 output_path = Path.joinpath(
                     self._output_dir, f"epoch_{epoch}", ADAPTER_MODEL_FNAME
@@ -858,11 +865,11 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
                     "PEFT integration for Llama3.2 Vision is not supported, skipping adapter config save"
                 )
             else:
-                state_dict[
-                    training.ADAPTER_CONFIG
-                ] = convert_weights.tune_to_peft_adapter_config(
-                    adapter_config=state_dict[training.ADAPTER_CONFIG],
-                    base_model_name_or_path=self.repo_id,
+                state_dict[training.ADAPTER_CONFIG] = (
+                    convert_weights.tune_to_peft_adapter_config(
+                        adapter_config=state_dict[training.ADAPTER_CONFIG],
+                        base_model_name_or_path=self.repo_id,
+                    )
                 )
 
                 output_path = Path.joinpath(
