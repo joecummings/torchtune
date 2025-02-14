@@ -586,7 +586,14 @@ def get_all_checkpoints_in_dir(
             if match:
                 checkpoints.append(item)
 
-    return checkpoints
+    def get_checkpoint_number(x):
+        """Extracts a number from checkpoint folder regex pattern match."""
+        # Index from where the pattern starts
+        pattern_start_ix = regex_to_match.search(x.name).span()[0]
+        string_after_pattern = x.name[pattern_start_ix:]
+        return int("".join([x for x in string_after_pattern if x.isdigit()]))
+
+    return sorted(checkpoints, key=get_checkpoint_number)
 
 
 def prune_surplus_checkpoints(
