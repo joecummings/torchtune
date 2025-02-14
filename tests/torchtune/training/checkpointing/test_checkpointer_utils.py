@@ -364,6 +364,13 @@ class TestGetLatestCheckpoint:
         latest_ckpt = get_latest_checkpoint(tmpdir)
         assert latest_ckpt == ckpt_dir_1
 
+    def test_get_latest_checkpoint_zero_checkpoints(self, tmpdir):
+        """Test get_latest_checkpoint when there are no checkpoints."""
+        tmpdir = Path(tmpdir)
+
+        latest_ckpt = get_latest_checkpoint(tmpdir)
+        assert latest_ckpt is None
+
     def test_get_latest_checkpoint_leading_zeros(self, tmpdir):
         """Test get_latest_checkpoint with leading zeros in checkpoint name."""
         tmpdir = Path(tmpdir)

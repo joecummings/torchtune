@@ -596,7 +596,9 @@ def get_all_checkpoints_in_dir(
     return sorted(checkpoints, key=get_checkpoint_number)
 
 
-def get_latest_checkpoint(dir: Path, *, pattern: str = r"^epoch_(\d+)") -> Path:
+def get_latest_checkpoint(
+    dir: Path, *, pattern: str = r"^epoch_(\d+)"
+) -> Optional[Path]:
     """
     Returns the latest checkpoint in the given directory.
     The pattern argument is a regular expression that matches the epoch number in the checkpoint filename.
@@ -615,10 +617,12 @@ def get_latest_checkpoint(dir: Path, *, pattern: str = r"^epoch_(\d+)") -> Path:
         PosixPath('/path/to/checkpoints/epoch_2')
 
     Returns:
-        Path: A Path object representing the latest checkpoint folder.
+        Optional[Path]: A Path object representing the latest checkpoint folder or None if there are none.
     """
     checkpoints = get_all_checkpoints_in_dir(dir, pattern=pattern)
-    return checkpoints[-1]
+    if len(checkpoints) > 0:
+        return checkpoints[-1]
+    return None
 
 
 def prune_surplus_checkpoints(
