@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import re
 from copy import deepcopy
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from torchtune.training.checkpointing._utils import (
     check_outdir_not_in_ckptdir,
     FormattedCheckpointFiles,
     get_all_checkpoints_in_dir,
+    get_checkpoint_number,
     get_latest_checkpoint,
     prune_surplus_checkpoints,
     safe_torch_load,
@@ -394,6 +396,19 @@ class TestGetLatestCheckpoint:
 
         latest_ckpt = get_latest_checkpoint(tmpdir, pattern=r"step_(\d+)")
         assert latest_ckpt == ckpt_step_0
+
+
+class TestGetCheckpointNumber:
+    """Series of tests for the ``prune_surplus_checkpoints`` function."""
+
+    def test_get_checkpoint_number_simple(self, tmpdir):
+        tmpdir = Path(tmpdir)
+        ckpt_dir_0 = tmpdir / "epoch_010"
+
+        checkpoint_number = get_checkpoint_number(
+            ckpt_dir_0, re.compile(r"^epoch_(\d+)")
+        )
+        assert checkpoint_number == 10
 
 
 class TestPruneSurplusCheckpoints:
