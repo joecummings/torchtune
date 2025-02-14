@@ -15,6 +15,7 @@ from torchtune.training.checkpointing._utils import (
     check_outdir_not_in_ckptdir,
     FormattedCheckpointFiles,
     get_all_checkpoints_in_dir,
+    get_latest_checkpoint,
     prune_surplus_checkpoints,
     safe_torch_load,
     update_state_dict_for_classifier,
@@ -346,6 +347,21 @@ class TestGetAllCheckpointsInDir:
         all_ckpts = get_all_checkpoints_in_dir(tmpdir)
         assert len(all_ckpts) == 1
         assert all_ckpts == [ckpt_dir_0]
+
+
+class TestGetLatestCheckpoint:
+    """Series of tests for the ``get_latest_checkpoint`` function."""
+
+    def test_get_latest_checkpoint_simple(self, tmpdir):
+        tmpdir = Path(tmpdir)
+        ckpt_dir_0 = tmpdir / "epoch_0"
+        ckpt_dir_0.mkdir(parents=True, exist_ok=True)
+
+        ckpt_dir_1 = tmpdir / "epoch_1"
+        ckpt_dir_1.mkdir()
+
+        latest_ckpt = get_latest_checkpoint(tmpdir)
+        assert latest_ckpt == ckpt_dir_1
 
 
 class TestPruneSurplusCheckpoints:
