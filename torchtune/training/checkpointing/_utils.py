@@ -635,7 +635,7 @@ def prune_surplus_checkpoints(
     dir: Path, keep_last_n_checkpoints: int = 1, *, pattern: str = r"^epoch_(\d+)"
 ) -> None:
     """
-    Prunes the surplus checkpoints in the given list of checkpoints.
+    Prunes the surplus checkpoints in the given a dir containing checkpoints.
     The function will keep the latest `keep_last_n_checkpoints` checkpoints and delete the rest.
 
     Args:
@@ -665,7 +665,9 @@ def prune_surplus_checkpoints(
 
     # Sort the checkpoints by their epoch or step number
     regex_to_match = re.compile(pattern)
-    checkpoints.sort(key=partial(get_checkpoint_number, regex_to_match=regex_to_match), reverse=True)
+    checkpoints.sort(
+        key=partial(get_checkpoint_number, regex_to_match=regex_to_match), reverse=True
+    )
 
     # Delete the surplus checkpoints
     for checkpoint in checkpoints[keep_last_n_checkpoints:]:
