@@ -556,8 +556,23 @@ def check_outdir_not_in_ckptdir(ckpt_dir: Path, out_dir: Path) -> bool:
 
 
 def get_checkpoint_number(checkpoint_path: Path, regex_to_match: re.Pattern) -> int:
-    """Extracts a number from checkpoint folder regex pattern match."""
-    # Index from where the pattern starts
+    """
+    Extracts a number from checkpoint path following regex pattern.
+
+    Args:
+        checkpoint_path (Path): Path to the checkpoint.
+        regex_to_match (re.Pattern): Compiled regex pattern.
+
+    Example:
+        >>> checkpoint = Path("/path/to/checkpoints/epoch_010")
+        >>> pattern = r"^epoch_(\\d+)"
+        >>> get_checkpoint_number(checkpoint, regex_to_match=re.compile(pattern))
+        10
+
+    Returns:
+        int: A number from the regex match to checkpoint path.
+    """
+    # Matching part of a name
     pattern_match = regex_to_match.search(checkpoint_path.name).group()
     return int("".join([x for x in pattern_match if x.isdigit()]))
 
