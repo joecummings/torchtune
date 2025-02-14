@@ -9,6 +9,8 @@ import re
 import shutil
 import string
 from enum import Enum
+
+from functools import partial
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from warnings import warn
@@ -553,6 +555,15 @@ def check_outdir_not_in_ckptdir(ckpt_dir: Path, out_dir: Path) -> bool:
     return True
 
 
+def get_checkpoint_number(checkpoint_path: Path, regex_to_match: re.Pattern) -> int:
+    """Extracts a number from checkpoint folder regex pattern match."""
+    # Index from where the pattern starts
+    pattern_start_ix = regex_to_match.search(checkpoint_path.name).span()[0]
+    # Take the pattern + string after the pattern
+    string_after_pattern = checkpoint_path.name[pattern_start_ix:]
+    return int("".join([x for x in string_after_pattern if x.isdigit()]))
+
+
 def get_all_checkpoints_in_dir(
     dir: Path, *, pattern: str = r"^epoch_(\d+)"
 ) -> List[Path]:
@@ -586,14 +597,9 @@ def get_all_checkpoints_in_dir(
             if match:
                 checkpoints.append(item)
 
-    def get_checkpoint_number(x):
-        """Extracts a number from checkpoint folder regex pattern match."""
-        # Index from where the pattern starts
-        pattern_start_ix = regex_to_match.search(x.name).span()[0]
-        string_after_pattern = x.name[pattern_start_ix:]
-        return int("".join([x for x in string_after_pattern if x.isdigit()]))
-
-    return sorted(checkpoints, key=get_checkpoint_number)
+    return sorted(
+        checkpoints, key=partial(get_checkpoint_number, regex_to_match=regex_to_match)
+    )
 
 
 def get_latest_checkpoint(
