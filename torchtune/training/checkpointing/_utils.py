@@ -632,23 +632,26 @@ def get_latest_checkpoint(
 
 
 def prune_surplus_checkpoints(
-    checkpoints: List[Path], keep_last_n_checkpoints: int = 1
+    dir: Path, keep_last_n_checkpoints: int = 1, *, pattern: str = r"^epoch_(\d+)"
 ) -> None:
     """
     Prunes the surplus checkpoints in the given list of checkpoints.
     The function will keep the latest `keep_last_n_checkpoints` checkpoints and delete the rest.
 
     Args:
-        checkpoints (List[Path]): A list of Path objects representing the checkpoints.
+        dir (Path): The directory containing the checkpoints.
         keep_last_n_checkpoints (int): The number of checkpoints to keep. Defaults to 1.
+        pattern (str): A regular expression pattern to match the epoch number in the checkpoint filename.
+            Defaults to "epoch_(\\d+)".
 
     Note:
-        Expects the format of the checkpoints to be "epoch_{epoch_number}" or "step_{step_number}". A higher number
-        indicates a more recent checkpoint. E.g. "epoch_1" is more recent than "epoch_0".
+        A higher number indicates a more recent checkpoint. E.g. "epoch_1" is more recent than "epoch_0".
 
     Example:
-        >>> checkpoints = [PosixPath('/path/to/checkpoints/epoch_1'), PosixPath('/path/to/checkpoints/epoch_2')]
-        >>> prune_surplus_checkpoints(checkpoints, keep_last_n_checkpoints=1)
+        >>> dir = Path("/path/to/checkpoints")
+        >>> os.listdir('/path/to/checkpoints')
+        ['epoch_1', 'epoch_2']
+        >>> prune_surplus_checkpoints(dir, keep_last_n_checkpoints=1)
         >>> os.listdir('/path/to/checkpoints')
         ['epoch_2']
 
@@ -658,8 +661,11 @@ def prune_surplus_checkpoints(
     if keep_last_n_checkpoints < 1:
         raise ValueError("keep_last_n_checkpoints must be greater than or equal to 1.")
 
+    checkpoints = get_all_checkpoints_in_dir(dir, pattern=pattern)
+
     # Sort the checkpoints by their epoch or step number
-    checkpoints.sort(key=lambda x: int(x.name.split("_")[-1]), reverse=True)
+    regex_to_match = re.compile(pattern)
+    checkpoints.sort(key=partial(get_checkpoint_number, regex_to_match=regex_to_match), reverse=True)
 
     # Delete the surplus checkpoints
     for checkpoint in checkpoints[keep_last_n_checkpoints:]:

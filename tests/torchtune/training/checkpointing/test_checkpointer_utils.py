@@ -331,7 +331,7 @@ class TestGetAllCheckpointsInDir:
         ckpt_dir_1 = tmpdir / "step_1"
         ckpt_dir_1.mkdir()
 
-        all_ckpts = get_all_checkpoints_in_dir(tmpdir, pattern="step_*")
+        all_ckpts = get_all_checkpoints_in_dir(tmpdir, pattern=r"^step_(\d+)")
         assert len(all_ckpts) == 1
         assert all_ckpts == [ckpt_dir_1]
 
@@ -392,7 +392,7 @@ class TestGetLatestCheckpoint:
         ckpt_epoch_1 = tmpdir / "epoch_1"
         ckpt_epoch_1.mkdir()
 
-        latest_ckpt = get_latest_checkpoint(tmpdir, pattern="step_*")
+        latest_ckpt = get_latest_checkpoint(tmpdir, pattern=r"step_(\d+)")
         assert latest_ckpt == ckpt_step_0
 
 
@@ -407,10 +407,30 @@ class TestPruneSurplusCheckpoints:
         ckpt_dir_1 = tmpdir / "epoch_1"
         ckpt_dir_1.mkdir()
 
-        prune_surplus_checkpoints([ckpt_dir_0, ckpt_dir_1], 1)
+        prune_surplus_checkpoints(tmpdir, 1)
         remaining_ckpts = os.listdir(tmpdir)
         assert len(remaining_ckpts) == 1
         assert remaining_ckpts == ["epoch_1"]
+
+    def test_prune_surplus_checkpoints_pattern(self, tmpdir):
+        """Test successful pruning on checkpoints with a different format."""
+        tmpdir = Path(tmpdir)
+
+        epoch_dash_0 = tmpdir / "epoch-0"
+        epoch_dash_0.mkdir(parents=True, exist_ok=True)
+
+        epoch_dash_1 = tmpdir / "epoch-1"
+        epoch_dash_1.mkdir()
+
+        epoch_underscore_0 = tmpdir / "epoch_0"
+        epoch_underscore_0.mkdir()
+
+        prune_surplus_checkpoints(tmpdir, 1, pattern=r"^epoch-(\d+)")
+        remaining_ckpts = list(tmpdir.iterdir())
+        assert len(remaining_ckpts) == 2
+        assert epoch_dash_1 in remaining_ckpts
+        assert epoch_dash_0 not in remaining_ckpts
+        assert epoch_underscore_0 in remaining_ckpts
 
     def test_prune_surplus_checkpoints_keep_last_invalid(self, tmpdir):
         """Test that we raise an error if keep_last_n_checkpoints is not >= 1"""
@@ -425,4 +445,4 @@ class TestPruneSurplusCheckpoints:
             ValueError,
             match="keep_last_n_checkpoints must be greater than or equal to 1",
         ):
-            prune_surplus_checkpoints([ckpt_dir_0, ckpt_dir_1], 0)
+            prune_surplus_checkpoints(tmpdir, 0)
