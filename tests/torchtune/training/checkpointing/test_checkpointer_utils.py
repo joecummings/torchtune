@@ -353,6 +353,7 @@ class TestGetLatestCheckpoint:
     """Series of tests for the ``get_latest_checkpoint`` function."""
 
     def test_get_latest_checkpoint_simple(self, tmpdir):
+        """Test most simple get_latest_checkpoint usage."""
         tmpdir = Path(tmpdir)
         ckpt_dir_0 = tmpdir / "epoch_0"
         ckpt_dir_0.mkdir(parents=True, exist_ok=True)
@@ -362,6 +363,30 @@ class TestGetLatestCheckpoint:
 
         latest_ckpt = get_latest_checkpoint(tmpdir)
         assert latest_ckpt == ckpt_dir_1
+
+    def test_get_latest_checkpoint_leading_zeros(self, tmpdir):
+        """Test get_latest_checkpoint with leading zeros in checkpoint name."""
+        tmpdir = Path(tmpdir)
+        ckpt_dir_0 = tmpdir / "epoch_001"
+        ckpt_dir_0.mkdir(parents=True, exist_ok=True)
+
+        ckpt_dir_1 = tmpdir / "epoch_010"
+        ckpt_dir_1.mkdir()
+
+        latest_ckpt = get_latest_checkpoint(tmpdir)
+        assert latest_ckpt == ckpt_dir_1
+
+    def test_get_latest_checkpoint_pattern(self, tmpdir):
+        """Test get_latest_checkpoint with different pattern."""
+        tmpdir = Path(tmpdir)
+        ckpt_step_0 = tmpdir / "step_0"
+        ckpt_step_0.mkdir(parents=True, exist_ok=True)
+
+        ckpt_epoch_1 = tmpdir / "epoch_1"
+        ckpt_epoch_1.mkdir()
+
+        latest_ckpt = get_latest_checkpoint(tmpdir, pattern="step_*")
+        assert latest_ckpt == ckpt_step_0
 
 
 class TestPruneSurplusCheckpoints:
