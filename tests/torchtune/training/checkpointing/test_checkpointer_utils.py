@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import re
 from copy import deepcopy
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from torchtune.training.checkpointing._utils import (
     check_outdir_not_in_ckptdir,
     FormattedCheckpointFiles,
     get_all_checkpoints_in_dir,
+    get_checkpoint_number,
+    get_latest_checkpoint,
     prune_surplus_checkpoints,
     safe_torch_load,
     update_state_dict_for_classifier,
@@ -292,6 +295,22 @@ class TestGetAllCheckpointsInDir:
         assert ckpt_dir_0 in all_ckpts
         assert ckpt_dir_1 in all_ckpts
 
+    def test_get_all_ckpts_are_sorted(self, tmpdir):
+        """Test that the list of returned checkpoints is sorted."""
+        checkpoints_amount = 100
+        tmpdir = Path(tmpdir)
+
+        ckpt_dirs = []
+        for ix in range(checkpoints_amount):
+            ckpt_dirs.append(tmpdir / f"epoch_{ix}")
+            ckpt_dirs[ix].mkdir(parents=True, exist_ok=True)
+
+        all_ckpts = get_all_checkpoints_in_dir(tmpdir)
+
+        assert len(all_ckpts) == checkpoints_amount
+        for ix in range(checkpoints_amount):
+            assert all_ckpts[ix] == ckpt_dirs[ix]
+
     def test_get_all_ckpts_with_pattern_that_matches_some(self, tmpdir):
         """Test that we only return the checkpoints that match the pattern."""
         tmpdir = Path(tmpdir)
@@ -314,7 +333,7 @@ class TestGetAllCheckpointsInDir:
         ckpt_dir_1 = tmpdir / "step_1"
         ckpt_dir_1.mkdir()
 
-        all_ckpts = get_all_checkpoints_in_dir(tmpdir, pattern="step_*")
+        all_ckpts = get_all_checkpoints_in_dir(tmpdir, pattern=r"^step_(\d+)")
         assert len(all_ckpts) == 1
         assert all_ckpts == [ckpt_dir_1]
 
@@ -332,6 +351,66 @@ class TestGetAllCheckpointsInDir:
         assert all_ckpts == [ckpt_dir_0]
 
 
+class TestGetLatestCheckpoint:
+    """Series of tests for the ``get_latest_checkpoint`` function."""
+
+    def test_get_latest_checkpoint_simple(self, tmpdir):
+        """Test most simple get_latest_checkpoint usage."""
+        tmpdir = Path(tmpdir)
+        ckpt_dir_0 = tmpdir / "epoch_0"
+        ckpt_dir_0.mkdir(parents=True, exist_ok=True)
+
+        ckpt_dir_1 = tmpdir / "epoch_1"
+        ckpt_dir_1.mkdir()
+
+        latest_ckpt = get_latest_checkpoint(tmpdir)
+        assert latest_ckpt == ckpt_dir_1
+
+    def test_get_latest_checkpoint_zero_checkpoints(self, tmpdir):
+        """Test get_latest_checkpoint when there are no checkpoints."""
+        tmpdir = Path(tmpdir)
+
+        latest_ckpt = get_latest_checkpoint(tmpdir)
+        assert latest_ckpt is None
+
+    def test_get_latest_checkpoint_leading_zeros(self, tmpdir):
+        """Test get_latest_checkpoint with leading zeros in checkpoint name."""
+        tmpdir = Path(tmpdir)
+        ckpt_dir_0 = tmpdir / "epoch_001"
+        ckpt_dir_0.mkdir(parents=True, exist_ok=True)
+
+        ckpt_dir_1 = tmpdir / "epoch_010"
+        ckpt_dir_1.mkdir()
+
+        latest_ckpt = get_latest_checkpoint(tmpdir)
+        assert latest_ckpt == ckpt_dir_1
+
+    def test_get_latest_checkpoint_pattern(self, tmpdir):
+        """Test get_latest_checkpoint with different pattern."""
+        tmpdir = Path(tmpdir)
+        ckpt_step_0 = tmpdir / "step_0"
+        ckpt_step_0.mkdir(parents=True, exist_ok=True)
+
+        ckpt_epoch_1 = tmpdir / "epoch_1"
+        ckpt_epoch_1.mkdir()
+
+        latest_ckpt = get_latest_checkpoint(tmpdir, pattern=r"step_(\d+)")
+        assert latest_ckpt == ckpt_step_0
+
+
+class TestGetCheckpointNumber:
+    """Series of tests for the ``prune_surplus_checkpoints`` function."""
+
+    def test_get_checkpoint_number_simple(self, tmpdir):
+        tmpdir = Path(tmpdir)
+        ckpt_dir_0 = tmpdir / "epoch_010"
+
+        checkpoint_number = get_checkpoint_number(
+            ckpt_dir_0, re.compile(r"^epoch_(\d+)")
+        )
+        assert checkpoint_number == 10
+
+
 class TestPruneSurplusCheckpoints:
     """Series of tests for the ``prune_surplus_checkpoints`` function."""
 
@@ -343,10 +422,30 @@ class TestPruneSurplusCheckpoints:
         ckpt_dir_1 = tmpdir / "epoch_1"
         ckpt_dir_1.mkdir()
 
-        prune_surplus_checkpoints([ckpt_dir_0, ckpt_dir_1], 1)
+        prune_surplus_checkpoints(tmpdir, 1)
         remaining_ckpts = os.listdir(tmpdir)
         assert len(remaining_ckpts) == 1
         assert remaining_ckpts == ["epoch_1"]
+
+    def test_prune_surplus_checkpoints_pattern(self, tmpdir):
+        """Test successful pruning on checkpoints with a different format."""
+        tmpdir = Path(tmpdir)
+
+        epoch_dash_0 = tmpdir / "epoch-0"
+        epoch_dash_0.mkdir(parents=True, exist_ok=True)
+
+        epoch_dash_1 = tmpdir / "epoch-1"
+        epoch_dash_1.mkdir()
+
+        epoch_underscore_0 = tmpdir / "epoch_0"
+        epoch_underscore_0.mkdir()
+
+        prune_surplus_checkpoints(tmpdir, 1, pattern=r"^epoch-(\d+)")
+        remaining_ckpts = list(tmpdir.iterdir())
+        assert len(remaining_ckpts) == 2
+        assert epoch_dash_1 in remaining_ckpts
+        assert epoch_dash_0 not in remaining_ckpts
+        assert epoch_underscore_0 in remaining_ckpts
 
     def test_prune_surplus_checkpoints_keep_last_invalid(self, tmpdir):
         """Test that we raise an error if keep_last_n_checkpoints is not >= 1"""
@@ -361,4 +460,4 @@ class TestPruneSurplusCheckpoints:
             ValueError,
             match="keep_last_n_checkpoints must be greater than or equal to 1",
         ):
-            prune_surplus_checkpoints([ckpt_dir_0, ckpt_dir_1], 0)
+            prune_surplus_checkpoints(tmpdir, 0)

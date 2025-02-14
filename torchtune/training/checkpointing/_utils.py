@@ -9,6 +9,8 @@ import re
 import shutil
 import string
 from enum import Enum
+
+from functools import partial
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from warnings import warn
@@ -553,6 +555,28 @@ def check_outdir_not_in_ckptdir(ckpt_dir: Path, out_dir: Path) -> bool:
     return True
 
 
+def get_checkpoint_number(checkpoint_path: Path, regex_to_match: re.Pattern) -> int:
+    """
+    Extracts a number from checkpoint path following regex pattern.
+
+    Args:
+        checkpoint_path (Path): Path to the checkpoint.
+        regex_to_match (re.Pattern): Compiled regex pattern.
+
+    Example:
+        >>> checkpoint = Path("/path/to/checkpoints/epoch_010")
+        >>> pattern = r"^epoch_(\\d+)"
+        >>> get_checkpoint_number(checkpoint, regex_to_match=re.compile(pattern))
+        10
+
+    Returns:
+        int: A number from the regex match to checkpoint path.
+    """
+    # Matching part of a name
+    pattern_match = regex_to_match.search(checkpoint_path.name).group()
+    return int("".join([x for x in pattern_match if x.isdigit()]))
+
+
 def get_all_checkpoints_in_dir(
     dir: Path, *, pattern: str = r"^epoch_(\d+)"
 ) -> List[Path]:
@@ -573,7 +597,7 @@ def get_all_checkpoints_in_dir(
         [PosixPath('/path/to/checkpoints/epoch_1'), PosixPath('/path/to/checkpoints/epoch_2'), ...]
 
     Returns:
-        List[Path]: A list of Path objects representing the checkpoints..
+        List[Path]: A list of Path objects representing the checkpoints.
     """
     checkpoints = []
     regex_to_match = re.compile(pattern)
@@ -586,27 +610,61 @@ def get_all_checkpoints_in_dir(
             if match:
                 checkpoints.append(item)
 
-    return checkpoints
+    return sorted(
+        checkpoints, key=partial(get_checkpoint_number, regex_to_match=regex_to_match)
+    )
+
+
+def get_latest_checkpoint(
+    dir: Path, *, pattern: str = r"^epoch_(\d+)"
+) -> Optional[Path]:
+    """
+    Returns the latest checkpoint in the given directory.
+    The pattern argument is a regular expression that matches the epoch number in the checkpoint filename.
+    The default pattern matches filenames of the form "epoch_{epoch_number}".
+
+    Args:
+        dir (Path): The directory containing the checkpoints.
+        pattern (str): A regular expression pattern to match the epoch number in the checkpoint filename.
+            Defaults to "epoch_(\\d+)".
+
+    Example:
+        >>> dir = Path("/path/to/checkpoints")
+        >>> os.listdir('/path/to/checkpoints')
+        ['epoch_1', 'epoch_2']
+        >>> get_all_checkpoints_in_dir(dir, pattern=r"^epoch_(\\d+)")
+        PosixPath('/path/to/checkpoints/epoch_2')
+
+    Returns:
+        Optional[Path]: A Path object representing the latest checkpoint folder or None if there are none.
+    """
+    checkpoints = get_all_checkpoints_in_dir(dir, pattern=pattern)
+    if len(checkpoints) > 0:
+        return checkpoints[-1]
+    return None
 
 
 def prune_surplus_checkpoints(
-    checkpoints: List[Path], keep_last_n_checkpoints: int = 1
+    dir: Path, keep_last_n_checkpoints: int = 1, *, pattern: str = r"^epoch_(\d+)"
 ) -> None:
     """
-    Prunes the surplus checkpoints in the given list of checkpoints.
+    Prunes the surplus checkpoints in the given a dir containing checkpoints.
     The function will keep the latest `keep_last_n_checkpoints` checkpoints and delete the rest.
 
     Args:
-        checkpoints (List[Path]): A list of Path objects representing the checkpoints.
+        dir (Path): The directory containing the checkpoints.
         keep_last_n_checkpoints (int): The number of checkpoints to keep. Defaults to 1.
+        pattern (str): A regular expression pattern to match the epoch number in the checkpoint filename.
+            Defaults to "epoch_(\\d+)".
 
     Note:
-        Expects the format of the checkpoints to be "epoch_{epoch_number}" or "step_{step_number}". A higher number
-        indicates a more recent checkpoint. E.g. "epoch_1" is more recent than "epoch_0".
+        A higher number indicates a more recent checkpoint. E.g. "epoch_1" is more recent than "epoch_0".
 
     Example:
-        >>> checkpoints = [PosixPath('/path/to/checkpoints/epoch_1'), PosixPath('/path/to/checkpoints/epoch_2')]
-        >>> prune_surplus_checkpoints(checkpoints, keep_last_n_checkpoints=1)
+        >>> dir = Path("/path/to/checkpoints")
+        >>> os.listdir('/path/to/checkpoints')
+        ['epoch_1', 'epoch_2']
+        >>> prune_surplus_checkpoints(dir, keep_last_n_checkpoints=1)
         >>> os.listdir('/path/to/checkpoints')
         ['epoch_2']
 
@@ -616,8 +674,13 @@ def prune_surplus_checkpoints(
     if keep_last_n_checkpoints < 1:
         raise ValueError("keep_last_n_checkpoints must be greater than or equal to 1.")
 
+    checkpoints = get_all_checkpoints_in_dir(dir, pattern=pattern)
+
     # Sort the checkpoints by their epoch or step number
-    checkpoints.sort(key=lambda x: int(x.name.split("_")[-1]), reverse=True)
+    regex_to_match = re.compile(pattern)
+    checkpoints.sort(
+        key=partial(get_checkpoint_number, regex_to_match=regex_to_match), reverse=True
+    )
 
     # Delete the surplus checkpoints
     for checkpoint in checkpoints[keep_last_n_checkpoints:]:

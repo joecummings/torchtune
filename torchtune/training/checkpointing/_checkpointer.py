@@ -945,12 +945,10 @@ class FullModelHFCheckpointer(_CheckpointerInterface):
 
         # If specified, prune the checkpoints in the output directory
         if self._keep_last_n_checkpoints is not None:
-            all_current_checkpoints = get_all_checkpoints_in_dir(
-                self._output_dir, pattern=ckpt_pattern
-            )
             prune_surplus_checkpoints(
-                all_current_checkpoints,
+                self._output_dir,
                 keep_last_n_checkpoints=self._keep_last_n_checkpoints,
+                pattern=ckpt_pattern,
             )
 
 
