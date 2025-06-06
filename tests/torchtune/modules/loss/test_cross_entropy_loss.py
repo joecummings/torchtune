@@ -70,3 +70,24 @@ class TestCEWithLinearChunkedOutputLoss:
         )
 
         assert_expected(chunked_loss, standard_loss, rtol=1e-2, atol=1e-2)
+
+    def test_error_without_set_model_output(self):
+        """Ensure AttributeError is raised if `set_model_output` isn't called."""
+
+        # Set up test parameters
+        batch_size = 1
+        seq_len = 2
+        embed_dim = 4
+        vocab_size = 10
+        ignore_index = -100
+
+        # Create dummy data
+        hidden = torch.randn(batch_size, seq_len, embed_dim, dtype=torch.float32)
+        targets = torch.randint(0, vocab_size, (batch_size, seq_len), dtype=torch.long)
+
+        ce_loss_fn = LinearCrossEntropyLoss(
+            num_output_chunks=2, ignore_index=ignore_index
+        )
+
+        with pytest.raises(AttributeError):
+            ce_loss_fn(hidden, targets)
