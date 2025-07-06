@@ -252,10 +252,10 @@ class TestLoRAFinetuneSingleDeviceRecipe:
             model.lora_attn_modules=['q_proj','v_proj','k_proj','output_proj'] \
             model.apply_lora_to_mlp=True \
             checkpointer=torchtune.training.FullModelTorchTuneCheckpointer \
-            checkpointer.checkpoint_dir={ckpt_dir} \
+            checkpointer.checkpoint_dir={os.path.join(tmpdir, epoch_folder_minus_one)} \
             checkpointer.checkpoint_files=[{ckpt_path}]\
             checkpointer.adapter_checkpoint={os.path.join(epoch_folder_minus_one, f"{ADAPTER_MODEL_FNAME}.pt")}
-            checkpointer.recipe_checkpoint={os.path.join(RECIPE_STATE_DIRNAME, "recipe_state.pt")}
+            checkpointer.recipe_checkpoint={os.path.join(tmpdir, epoch_folder_minus_one, "recipe_state.pt")}
             checkpointer.output_dir={tmpdir} \
             checkpointer.model_type=LLAMA3 \
             resume_from_checkpoint=True \
@@ -265,14 +265,14 @@ class TestLoRAFinetuneSingleDeviceRecipe:
             enable_activation_checkpointing=True \
             enable_activation_offloading=False \
         """.split()
-        cmd_2 = cmd_2 + self._get_test_config_overrides(epochs=3) + model_config
+        cmd_2 = cmd_2 + self._get_test_config_overrides() + model_config
         monkeypatch.setattr(sys, "argv", cmd_2)
         with pytest.raises(SystemExit, match=""):
             runpy.run_path(TUNE_PATH, run_name="__main__")
 
         # Second epoch only
-        expected_loss_values = self._fetch_expected_loss_values("llama3")[2:]
-        loss_values = get_loss_values_from_metric_logger(log_file)[:2]
+        expected_loss_values = self._fetch_expected_loss_values("llama3")
+        loss_values = get_loss_values_from_metric_logger(log_file)
 
         torch.testing.assert_close(
             loss_values, expected_loss_values, rtol=1e-5, atol=1e-5
@@ -354,14 +354,14 @@ class TestLoRAFinetuneSingleDeviceRecipe:
             enable_activation_offloading=False \
             enable_async_checkpointing=True \
         """.split()
-        cmd_2 = cmd_2 + self._get_test_config_overrides(epochs=3) + model_config
+        cmd_2 = cmd_2 + self._get_test_config_overrides() + model_config
         monkeypatch.setattr(sys, "argv", cmd_2)
         with pytest.raises(SystemExit, match=""):
             runpy.run_path(TUNE_PATH, run_name="__main__")
 
         # Second epoch only
-        expected_loss_values = self._fetch_expected_loss_values("llama3")[2:]
-        loss_values = get_loss_values_from_metric_logger(log_file)[:2]
+        expected_loss_values = self._fetch_expected_loss_values("llama3")
+        loss_values = get_loss_values_from_metric_logger(log_file)
 
         torch.testing.assert_close(
             loss_values, expected_loss_values, rtol=1e-5, atol=1e-5

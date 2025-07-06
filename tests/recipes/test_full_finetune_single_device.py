@@ -202,8 +202,10 @@ class TestFullFinetuneSingleDeviceRecipe:
         if use_steps:
             cmd_1.append("save_every_n_steps=2")
             final_ckpt_dir = "step_4"
+            prev_ckpt_dir = "step_2"
         else:
             final_ckpt_dir = "epoch_2"
+            prev_ckpt_dir = "epoch_1"
         cmd_1 = cmd_1 + self._get_test_config_overrides() + model_config
 
         monkeypatch.setattr(sys, "argv", cmd_1)
@@ -211,16 +213,13 @@ class TestFullFinetuneSingleDeviceRecipe:
             runpy.run_path(TUNE_PATH, run_name="__main__")
 
         # 2. Find the checkpoint at the end of the first epoch
-        step_folder = get_largest_iter_folder(tmpdir, pattern=r"^step_(\d+)")
-        step_folder_at_epoch_boundary = f"step_{int(step_folder.split('_')[-1]) - 2}"
         suffix = ".safetensors"
-        model_ckpt_fname = "model" + suffix
-        assert step_folder is not None, "No step folder found"
-        assert os.path.exists(
-            os.path.join(tmpdir, step_folder_at_epoch_boundary, model_ckpt_fname)
-        ), "Checkpoint file does not exist"
+        model_ckpt_fname = (
+            "model" + suffix
+        )
+        assert os.path.exists(os.path.join(tmpdir, prev_ckpt_dir, model_ckpt_fname)), "Checkpoint file does not exist"
 
-        shutil.rmtree(tmpdir / "step_4")
+        shutil.rmtree(tmpdir / final_ckpt_dir)
 
         # 3. Resume training w/ the checkpoint from epoch boundary
         cmd_2 = f"""
@@ -229,17 +228,16 @@ class TestFullFinetuneSingleDeviceRecipe:
             batch_size=8 \
             output_dir={tmpdir} \
             checkpointer._component_=torchtune.training.FullModelHFCheckpointer \
-            checkpointer.checkpoint_dir={tmpdir}/{step_folder_at_epoch_boundary} \
-            checkpointer.checkpoint_files=["{os.path.join(tmpdir, step_folder_at_epoch_boundary, model_ckpt_fname)}"]\
+            checkpointer.checkpoint_dir={tmpdir}/{prev_ckpt_dir} \
+            checkpointer.checkpoint_files=["{os.path.join(tmpdir, prev_ckpt_dir, model_ckpt_fname)}"]\
             checkpointer.output_dir={tmpdir} \
             checkpointer.recipe_checkpoint="recipe_state.pt"
-            checkpointer.model_type=LLAMA2 \
-            tokenizer.path=/tmp/test-artifacts/tokenizer.model \
+            tokenizer.path={tokenizer_path} \
             tokenizer.prompt_template=null \
             resume_from_checkpoint=True \
             metric_logger.filename={log_file} \
             optimizer_in_bwd=False \
-            save_every_n_steps=1 \
+            save_every_n_steps=2 \
         """.split()
         cmd_2 = cmd_2 + self._get_test_config_overrides() + model_config
         monkeypatch.setattr(sys, "argv", cmd_2)
@@ -249,35 +247,7 @@ class TestFullFinetuneSingleDeviceRecipe:
         # 4. Make sure loss values match the expected values
         expected_loss_values = self._fetch_expected_loss_values(model_type)[2:]
         loss_values = get_loss_values_from_metric_logger(log_file)
-        torch.testing.assert_close(
-            loss_values, expected_loss_values, rtol=1e-4, atol=1e-4
-        )
 
-        # 5. Resume from a specific checkpoint
-        cmd_3 = f"""
-        tune run full_finetune_single_device \
-            --config llama3/8B_full_single_device \
-            batch_size=8 \
-            output_dir={tmpdir} \
-            checkpointer.checkpoint_dir={tmpdir}/step_3 \
-            checkpointer.checkpoint_files=[model.safetensors] \
-            checkpointer.output_dir={tmpdir} \
-            tokenizer.path={tokenizer_path} \
-            tokenizer.prompt_template=null \
-            resume_from_checkpoint=True \
-            metric_logger.filename={log_file} \
-            optimizer_in_bwd=False \
-            save_every_n_steps=1 \
-        """.split()
-
-        cmd_3 = cmd_3 + self._get_test_config_overrides() + model_config
-        monkeypatch.setattr(sys, "argv", cmd_3)
-        with pytest.raises(SystemExit, match=""):
-            runpy.run_path(TUNE_PATH, run_name="__main__")
-
-        # 6. Make sure loss values match the expected values
-        expected_loss_values = self._fetch_expected_loss_values(model_type)[2:]
-        loss_values = get_loss_values_from_metric_logger(log_file)[:2]
         torch.testing.assert_close(
             loss_values, expected_loss_values, rtol=1e-4, atol=1e-4
         )

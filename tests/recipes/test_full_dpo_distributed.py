@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import runpy
 import shutil
 import sys
@@ -112,11 +113,11 @@ class TestFullDPODistributedRecipe:
             output_dir={tmpdir} \
             checkpointer=torchtune.training.FullModelTorchTuneCheckpointer \
             checkpointer.checkpoint_dir='{tmpdir}/epoch_0' \
-            checkpointer.checkpoint_files=[{ckpt_path}]\
+            checkpointer.checkpoint_files=[{ckpt_to_resume_from}]\
             checkpointer.output_dir={tmpdir} \
             checkpointer.model_type=LLAMA3 \
             ref_checkpointer=torchtune.training.FullModelTorchTuneCheckpointer \
-            ref_checkpointer.checkpoint_dir='{tmpdir}/epoch_0' \
+            ref_checkpointer.checkpoint_dir='{ckpt_dir}' \
             ref_checkpointer.checkpoint_files=[{ckpt_path}]\
             ref_checkpointer.output_dir={tmpdir} \
             ref_checkpointer.model_type=LLAMA3 \
@@ -215,6 +216,8 @@ class TestFullDPODistributedRecipe:
         runpy.run_path(TUNE_PATH, run_name="__main__")
 
         resumed_loss_values = get_loss_values_from_metric_logger(resumed_log_file)
+        print(f"{resumed_loss_values=}")
+        print(f"{expected_loss_values=}")
         torch.testing.assert_close(
             resumed_loss_values, self.expected_loss_values()[2:], rtol=1e-5, atol=1e-5
         )

@@ -537,7 +537,7 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             optimizer=self.optimizer,
             training_progress=TrainingProgress(
                 seed=self.seed,
-                epochs_run=self.epochs_run,
+                epochs_run=epoch,
                 total_epochs=self.total_epochs,
                 max_steps_per_epoch=self.max_steps_per_epoch,
                 dataloader_state_dict=self._dataloader.state_dict(),
@@ -690,8 +690,9 @@ class FullFinetuneRecipeSingleDevice(FTRecipeInterface):
             self.epochs_run += 1
 
         self._profiler.stop()
+
         # Save final checkpoint
-        self.save_checkpoint(epoch=curr_epoch, step=self.global_step, full_tensors=True)
+        self.save_checkpoint(epoch=self.total_epochs - 1, step=self.global_step, full_tensors=True)
 
     def cleanup(self) -> None:
         self._metric_logger.close()
